@@ -1,11 +1,13 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './stepflow.module.css';
 
 export default function StepFlowPage() {
+  const searchParams = useSearchParams();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: '', // 업종 입력값
@@ -13,6 +15,33 @@ export default function StepFlowPage() {
   });
   const [loading, setLoading] = useState(false);
   const [contactError, setContactError] = useState('');
+  const [clickSource, setClickSource] = useState<string>('baro_form');
+
+  // click_source 포맷팅 함수
+  const formatClickSource = (utmSource: string, materialId: string | null): string => {
+    const sourceMap: { [key: string]: string } = {
+      daangn: '당근마켓',
+      insta: '인스타그램',
+    };
+
+    const koreanSource = sourceMap[utmSource] || utmSource;
+
+    if (materialId) {
+      return `${koreanSource}_소재_${materialId}`; // 예: "당근마켓_소재_123"
+    }
+    return koreanSource; // 예: "당근마켓"
+  };
+
+  // URL 파라미터에서 click_source 추출
+  useEffect(() => {
+    const utmSource = searchParams.get('utm_source');
+    const materialId = searchParams.get('material_id');
+
+    if (utmSource) {
+      const formatted = formatClickSource(utmSource, materialId);
+      setClickSource(formatted);
+    }
+  }, [searchParams]);
 
   // 연락처 포맷팅 (010-XXXX-XXXX)
   const formatContact = (value: string) => {
@@ -53,7 +82,7 @@ export default function StepFlowPage() {
         body: JSON.stringify({
           name: formData.name,
           contact: formData.contact,
-          click_source: 'baro_form',
+          click_source: clickSource,
         }),
       });
 
