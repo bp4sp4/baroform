@@ -6,19 +6,25 @@ import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './stepflow.module.css';
 
-// click_source 포맷팅 함수
-const formatClickSource = (utmSource: string, materialId: string | null): string => {
+const formatClickSource = (
+  utmSource: string,
+  materialId: string | null
+): string => {
   const sourceMap: { [key: string]: string } = {
-    daangn: '당근마켓',
-    insta: '인스타그램',
+    daangn: "당근",
+    insta: "인스타",
+    facebook: "페이스북",
+    google: "구글",
+    youtube: "유튜브",
   };
 
-  const koreanSource = sourceMap[utmSource] || utmSource;
+  const shortSource = sourceMap[utmSource] || utmSource;
+  const homepageName = "바로폼";
 
   if (materialId) {
-    return `${koreanSource}_소재_${materialId}`; // 예: "당근마켓_소재_123"
+    return `${homepageName}_${shortSource}_소재_${materialId}`;
   }
-  return koreanSource; // 예: "당근마켓"
+  return `${homepageName}_${shortSource}`;
 };
 
 // URL 파라미터를 읽는 컴포넌트
@@ -349,7 +355,7 @@ function StepFlowContent({ clickSource }: { clickSource: string }) {
 }
 
 export default function StepFlowPage() {
-  const [clickSource, setClickSource] = useState<string>('baro_form');
+  const [clickSource, setClickSource] = useState<string>('바로폼');
 
   return (
     <Suspense fallback={
