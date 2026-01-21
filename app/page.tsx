@@ -210,7 +210,7 @@ function StepFlowContent({ clickSource }: { clickSource: string }) {
               <h2 className={styles.title}>업종이 어떻게 되시나요?</h2>
               <input
                 type="text"
-                placeholder="예: 카페, IT 서비스"
+                placeholder="자세하게 적어주시면 상담에 도움이 됩니다 (예: 카페, IT 서비스, 제조업 등)"
                 className={styles.inputField}
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -324,15 +324,13 @@ function StepFlowContent({ clickSource }: { clickSource: string }) {
                   <br />
                   상담 진행, 정책자금 컨설팅, 문의사항 응대, 민원해결
                   <br />
-                  광고성 정보 수신에 대하여 별도의 동의를 한 회원에 한하여
-                  "한평생 바로기업"과 각 제휴사의 새로운 서비스, 이벤트, 최신
-                  정보의 안내 등 회원의 취향에 맞는 최적의 정보 제공
+                  개인정보는 상담 서비스 제공 및 정책자금 컨설팅을 위한 목적으로만
+                  수집 및 이용되며, 동의 없이 제3자에게 제공되지 않습니다
                 </p>
                 <p className={styles.modalPrivacyItem}>
                   <strong>2. 수집 및 이용하는 개인정보 항목</strong>
                   <br />
-                  (필수) 이름(회사명), 휴대전화번호
-                  
+                  필수 - 이름(회사명,업종 등), 연락처(휴대전화번호)
                 </p>
                 <p className={styles.modalPrivacyItem}>
                   <strong>3. 보유 및 이용 기간</strong>
