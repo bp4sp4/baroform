@@ -29,6 +29,30 @@ function createTransporter() {
   });
 }
 
+// 한국 시간(KST, UTC+9)으로 변환하는 함수
+function getKoreanTime(): string {
+  const now = new Date();
+  
+  // Asia/Seoul 타임존으로 변환
+  const koreanTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  
+  // 한국 시간 형식으로 포맷팅: "2026. 1. 20. 오전 7:30:34"
+  const year = koreanTime.getFullYear();
+  const month = koreanTime.getMonth() + 1;
+  const day = koreanTime.getDate();
+  const hours = koreanTime.getHours();
+  const minutes = koreanTime.getMinutes();
+  const seconds = koreanTime.getSeconds();
+  
+  const ampm = hours < 12 ? "오전" : "오후";
+  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+  
+  const formattedMinutes = minutes.toString().padStart(2, "0");
+  const formattedSeconds = seconds.toString().padStart(2, "0");
+  
+  return `${year}. ${month}. ${day}. ${ampm} ${displayHours}:${formattedMinutes}:${formattedSeconds}`;
+}
+
 export async function sendConsultationEmail(data: ConsultationEmailData) {
   console.log("[EMAIL] sendConsultationEmail 함수 시작");
   console.log(
@@ -37,6 +61,9 @@ export async function sendConsultationEmail(data: ConsultationEmailData) {
   );
 
   try {
+    // 한국 시간 가져오기
+    const koreanTime = getKoreanTime();
+    
     // Brevo 설정 확인
     const smtpLogin = process.env.BREVO_SMTP_LOGIN;
     const smtpKey = process.env.BREVO_SMTP_KEY;
@@ -83,19 +110,25 @@ export async function sendConsultationEmail(data: ConsultationEmailData) {
     // Transporter 생성
     const transporter = createTransporter();
 
-    // SMTP 연결 확인
+    // SMTP 연결 확인 (선택적 - 실패해도 이메일 전송 시도)
     console.log("[EMAIL] SMTP 연결 확인 중...");
-    await new Promise<void>((resolve, reject) => {
-      transporter.verify(function (error: Error | null) {
-        if (error) {
-          console.error("[EMAIL] SMTP 연결 확인 실패:", error);
-          reject(error);
-        } else {
-          console.log("[EMAIL] SMTP 연결 확인 성공");
-          resolve();
-        }
+    try {
+      await new Promise<void>((resolve, reject) => {
+        transporter.verify(function (error: Error | null) {
+          if (error) {
+            console.warn("[EMAIL] SMTP 연결 확인 실패 (계속 진행):", error.message);
+            // 연결 확인 실패해도 이메일 전송은 시도
+            resolve();
+          } else {
+            console.log("[EMAIL] SMTP 연결 확인 성공");
+            resolve();
+          }
+        });
       });
-    });
+    } catch (verifyError) {
+      console.warn("[EMAIL] SMTP 연결 확인 중 예외 발생 (계속 진행):", verifyError);
+      // 연결 확인 실패해도 이메일 전송은 시도
+    }
 
     // 기존 HTML 템플릿 그대로 사용
     const emailHtml = `
@@ -147,10 +180,7 @@ export async function sendConsultationEmail(data: ConsultationEmailData) {
               </tr>
               <tr style="border-top: 1px solid #ebedf0;">
                 <td style="padding-top: 20px; font-size: 14px; color: #8b95a1;">신청 시각</td>
-                <td style="padding-top: 20px; font-size: 14px; color: #8b95a1; text-align: right;">${new Date().toLocaleString(
-                  "ko-KR",
-                  { timeZone: "Asia/Seoul" }
-                )}</td>
+                <td style="padding-top: 20px; font-size: 14px; color: #8b95a1; text-align: right;">${koreanTime}</td>
               </tr>
             </table>
           </div>
@@ -179,7 +209,7 @@ export async function sendConsultationEmail(data: ConsultationEmailData) {
 이름(회사명): ${data.name}
 연락처: ${data.contact}
 유입 경로: ${data.click_source || "바로기업 홈페이지"}
-신청 시간: ${new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+신청 시간: ${koreanTime}
     `;
 
     // 이메일 전송
@@ -198,9 +228,17 @@ export async function sendConsultationEmail(data: ConsultationEmailData) {
 
     const info = await new Promise<nodemailer.SentMessageInfo>(
       (resolve, reject) => {
+        // 타임아웃 설정 (60초)
+        const timeout = setTimeout(() => {
+          reject(new Error("이메일 전송 타임아웃 (60초 초과)"));
+        }, 60000);
+
         transporter.sendMail(mailData, (err: Error | null, info: nodemailer.SentMessageInfo) => {
+          clearTimeout(timeout);
           if (err) {
             console.error("[EMAIL] sendMail 에러:", err);
+            console.error("[EMAIL] 에러 코드:", (err as any).code);
+            console.error("[EMAIL] 에러 명령:", (err as any).command);
             reject(err);
           } else {
             console.log("[EMAIL] sendMail 성공:", info);
@@ -213,6 +251,75 @@ export async function sendConsultationEmail(data: ConsultationEmailData) {
     console.log("[EMAIL] ✅ 메일 전송 성공!");
     console.log("[EMAIL] - messageId:", info.messageId);
     console.log("[EMAIL] - response:", info.response);
+
+    // 슬랙 웹훅 알림 전송 (비동기, 실패해도 이메일 전송은 성공 처리)
+    const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
+    console.log("[SLACK] 슬랙 웹훅 URL 존재:", !!slackWebhookUrl);
+    
+    if (slackWebhookUrl) {
+      try {
+        // 슬랙 메시지 포맷 (가장 안정적인 기본 포맷)
+        const phoneNumber = data.contact.replace(/-/g, "");
+        const slackMessage = {
+          text: "새 상담 신청 접수",
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: `*새 상담 신청 접수*\n\n*이름/기업명:* ${data.name}\n*연락처:* ${data.contact}\n*유입 경로:* ${data.click_source || "랜딩페이지"}\n*신청 시각:* ${koreanTime}`,
+              },
+            },
+          ],
+        };
+
+        console.log("[SLACK] 슬랙 메시지 전송 시도 중...");
+        console.log("[SLACK] 웹훅 URL:", slackWebhookUrl.substring(0, 30) + "...");
+        console.log("[SLACK] 메시지 내용:", JSON.stringify(slackMessage, null, 2));
+
+        // 타임아웃 설정 (10초)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const slackResponse = await fetch(slackWebhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(slackMessage),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        const responseText = await slackResponse.text();
+        console.log("[SLACK] 슬랙 응답 상태:", slackResponse.status);
+        console.log("[SLACK] 슬랙 응답 내용:", responseText);
+
+        if (slackResponse.ok) {
+          console.log("[SLACK] ✅ 슬랙 알림 전송 성공");
+        } else {
+          console.error("[SLACK] ❌ 슬랙 알림 전송 실패:", responseText);
+        }
+      } catch (slackError) {
+        console.error("[SLACK] ❌ 슬랙 알림 전송 중 오류 발생");
+        console.error(
+          "[SLACK] 에러 타입:",
+          slackError instanceof Error ? slackError.constructor.name : typeof slackError
+        );
+        console.error(
+          "[SLACK] 에러 메시지:",
+          slackError instanceof Error ? slackError.message : String(slackError)
+        );
+        console.error(
+          "[SLACK] 에러 스택:",
+          slackError instanceof Error ? slackError.stack : "스택 없음"
+        );
+        // 슬랙 전송 실패해도 이메일 전송은 성공 처리
+      }
+    } else {
+      console.warn("[SLACK] SLACK_WEBHOOK_URL이 설정되지 않아 슬랙 알림을 건너뜁니다");
+    }
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
