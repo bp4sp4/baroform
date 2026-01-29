@@ -5,6 +5,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './stepflow.module.css';
+import Footer from '@/components/Footer';
 
 const formatClickSource = (
   utmSource: string,
@@ -350,7 +351,9 @@ function StepFlowContent({ clickSource }: { clickSource: string }) {
           </div>
         </div>
       )}
+   
     </div>
+    
   );
 }
 
